@@ -3,7 +3,7 @@ import pandas as pd
 import logging
 import argparse
 import os
-from sklearn.metrics import f1_score, classification_report
+from sklearn.metrics import f1_score, precision_recall_fscore_support
 from tqdm import tqdm
 import torch
 import torch.nn as nn
@@ -12,7 +12,10 @@ from torch.utils.data import DataLoader
 from model import DeBERTaBaseline
 from dataset import DepresionDataset
 
+import wandb
 
+
+wandb.init(project="depression-challenge", entity="yao0510")
 transformers_logger = logging.getLogger("transformers")
 transformers_logger.setLevel(logging.ERROR)
 
@@ -41,7 +44,7 @@ def get_argument():
                         help="learning rate")
     opt.add_argument("--epochs",
                         type=int,
-                        default=3,
+                        default=30,
                         help="epochs")
     config = vars(opt.parse_args())
     return config
@@ -109,6 +112,8 @@ if __name__ == '__main__':
     # check trained parameters
     print(sum(p.numel() for p in deberta_classifier.parameters() if p.requires_grad))
 
+    wandb.watch(deberta_classifier, criterion, log="all", log_freq=1)
+
     # training
     pbar = tqdm(range(config['epochs']), desc='Epoch: ')
     for epoch in pbar:
@@ -131,9 +136,10 @@ if __name__ == '__main__':
 
             current_loss = loss.item()
             total_loss += current_loss
-            pbar.set_description("Loss: {}".format(round(current_loss, 3)), refresh=True)
+            pbar.set_description("Status: Train, Loss: {}".format(round(current_loss, 3)), refresh=True)
 
         # testing
+        pbar.set_description("Status: Val", refresh=True)
         y_pred, y_true = [], []
         deberta_classifier.eval()
         for loader_idx, item in enumerate(val_dataloader):
@@ -157,8 +163,14 @@ if __name__ == '__main__':
                 y_true += label.tolist()
 
         f1 = round(f1_score(y_true, y_pred, average='macro'), 5)
+        precision, recall, fbeta_score, support = precision_recall_fscore_support(y_true, y_pred, average='macro')
+
+        wandb.log({'epoch': epoch, 'train loss': round(total_loss/len(train_dataloader), 5), 'f1': f1, 'precision': precision, 'recall': recall})
 
         if f1 >= best_val_f1:
+            wandb.run.summary["best_f1_macro"] = f1
+            wandb.run.summary["best_precision_macro"] = precision
+            wandb.run.summary["best_recall_macro"] = recall
             best_val_f1 = f1
             save(deberta_classifier, config, epoch=epoch)
 
