@@ -1,21 +1,21 @@
-from transformers import DebertaTokenizer, DebertaModel
+from transformers import DebertaTokenizer, DebertaModel, get_scheduler
 import pandas as pd
 import logging
 import argparse
 import os
-from sklearn.metrics import f1_score, precision_recall_fscore_support
+from sklearn.metrics import precision_recall_fscore_support
 from tqdm import tqdm
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from model import DeBERTaBaseline
+from model import DeBERTaBaseline, RAdam
 from dataset import DepresionDataset
 
 import wandb
 
 
-wandb.init(project="depression-challenge", entity="yao0510")
+wandb.init(project="depression-challenge", entity="nycu_adsl_depression_ycw")
 transformers_logger = logging.getLogger("transformers")
 transformers_logger.setLevel(logging.ERROR)
 
@@ -44,8 +44,20 @@ def get_argument():
                         help="learning rate")
     opt.add_argument("--epochs",
                         type=int,
-                        default=30,
+                        default=10,
                         help="epochs")
+    opt.add_argument("--hidden",
+                        type=int,
+                        default=256,
+                        help="dimension of hidden state")
+    opt.add_argument("--dropout",
+                        type=int,
+                        default=0.1,
+                        help="dropout rate")
+    opt.add_argument("--head",
+                        type=int,
+                        default=4,
+                        help="number of heads")
     config = vars(opt.parse_args())
     return config
 
@@ -75,6 +87,7 @@ def save(model, config, epoch=None):
 
 if __name__ == '__main__':
     config = get_argument()
+    wandb.config = config.copy()
     set_seed(config['seed_value'])
 
     # read tsv data
@@ -91,23 +104,25 @@ if __name__ == '__main__':
     df_train['Label'] = df_train['Label'].map(category)
     df_val['Label'] = df_val['Label'].map(category)
 
+    # prepare to dataloader
+    train_dataset = DepresionDataset(df_train, mode='train')
+    train_dataloader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=16)
+    val_dataset = DepresionDataset(df_val, mode='train')
+    val_dataloader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=16)
+
     # load pretrained model
     deberta_tokenizer = DebertaTokenizer.from_pretrained(PRETRAINED_PATH)
     deberta = DebertaModel.from_pretrained(PRETRAINED_PATH)
     for param in deberta.parameters():
         param.requires_grad = False
 
-    deberta_classifier = DeBERTaBaseline()
+    deberta_classifier = DeBERTaBaseline(config)
     criterion = nn.CrossEntropyLoss()
-    deberta_classifier_optimizer = torch.optim.Adam(deberta_classifier.parameters(), lr=config['lr'])
+    # deberta_classifier_optimizer = torch.optim.Adam(deberta_classifier.parameters(), lr=config['lr'])
+    optimizer = RAdam(deberta_classifier.parameters(), lr=config['lr'])
+    scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=len(train_dataloader)*config['epochs'])
 
     deberta.to(device), deberta_classifier.to(device), criterion.to(device)
-
-    # prepare to dataloader
-    train_dataset = DepresionDataset(df_train, mode='train')
-    train_dataloader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=16)
-    val_dataset = DepresionDataset(df_val, mode='train')
-    val_dataloader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=16)
 
     # check trained parameters
     print(sum(p.numel() for p in deberta_classifier.parameters() if p.requires_grad))
@@ -120,7 +135,7 @@ if __name__ == '__main__':
         deberta_classifier.train()
         total_loss, best_val_f1 = 0, 0
         for loader_idx, item in enumerate(train_dataloader):
-            deberta_classifier_optimizer.zero_grad()
+            optimizer.zero_grad()
             text, label = item[0], item[1].to(device)
 
             # transform sentences to embeddings via DeBERTa
@@ -132,7 +147,8 @@ if __name__ == '__main__':
             
             loss = criterion(predicted_output, label)
             loss.backward()
-            deberta_classifier_optimizer.step()
+            optimizer.step()
+            scheduler.step()
 
             current_loss = loss.item()
             total_loss += current_loss
@@ -143,7 +159,6 @@ if __name__ == '__main__':
         y_pred, y_true = [], []
         deberta_classifier.eval()
         for loader_idx, item in enumerate(val_dataloader):
-            deberta_classifier_optimizer.zero_grad()
             text, label = item[0], item[1].to(device)
 
             # transform sentences to embeddings via DeBERTa
@@ -162,10 +177,12 @@ if __name__ == '__main__':
                 y_pred += predicted_label.cpu().detach().flatten().tolist()
                 y_true += label.tolist()
 
-        f1 = round(f1_score(y_true, y_pred, average='macro'), 5)
-        precision, recall, fbeta_score, support = precision_recall_fscore_support(y_true, y_pred, average='macro')
+        precision, recall, f1, support = precision_recall_fscore_support(y_true, y_pred, average='macro')
+        f1 = round(f1, 5)
+        precision = round(precision, 5)
+        recall = round(recall, 5)
 
-        wandb.log({'epoch': epoch, 'train loss': round(total_loss/len(train_dataloader), 5), 'f1': f1, 'precision': precision, 'recall': recall})
+        wandb.log({'epoch': epoch, 'train loss': round(total_loss/len(train_dataloader), 5), 'f1': f1, 'precision': precision, 'recall': recall, 'support': support})
 
         if f1 >= best_val_f1:
             wandb.run.summary["best_f1_macro"] = f1
