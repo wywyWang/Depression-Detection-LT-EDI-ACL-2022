@@ -12,13 +12,14 @@ class DeBERTaBaseline(nn.Module):
         dim = config['hidden']
         dropout = config['dropout']
         head = config['head']
+        n_layers = config['n_layers']
 
         self.text_embedding = nn.Sequential(
             nn.Linear(768, dim),
             nn.ReLU()
         )
 
-        self.gru = nn.GRU(input_size=dim, hidden_size=dim, num_layers=1, dropout=dropout, batch_first=False, bidirectional=False)
+        self.gru = nn.GRU(input_size=dim, hidden_size=dim, num_layers=n_layers, dropout=dropout, batch_first=False, bidirectional=False)
 
         self.text_attention = MultiHeadAttention(head, dim, dim, dim, dropout=dropout)
         self.text_pos_ffn = PositionwiseFeedForward(dim, dim*2, dropout=dropout)

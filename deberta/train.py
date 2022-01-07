@@ -17,6 +17,8 @@ import wandb
 
 
 wandb.init(project="depression-challenge", entity="nycu_adsl_depression_ycw", tags=["deberta"])
+# artifact = wandb.use_artifact('nycu_adsl_depression_ycw/depression-challenge/dataset:v0', type='dataset')
+# artifact_dir = artifact.download()
 transformers_logger = logging.getLogger("transformers")
 transformers_logger.setLevel(logging.ERROR)
 
@@ -37,7 +39,7 @@ def get_argument():
                         help="seed value")
     opt.add_argument("--batch_size",
                         type=int,
-                        default=32,
+                        default=16,
                         help="batch size")
     opt.add_argument("--lr",
                         type=int,
@@ -59,6 +61,10 @@ def get_argument():
                         type=int,
                         default=4,
                         help="number of heads")
+    opt.add_argument("--n_layers",
+                        type=int,
+                        default=2,
+                        help="number of layers")
     config = vars(opt.parse_args())
     return config
 
