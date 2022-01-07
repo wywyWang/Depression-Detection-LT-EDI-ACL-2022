@@ -1,4 +1,5 @@
 from transformers import DebertaTokenizer, DebertaModel, get_scheduler
+# from transformers import RobertaTokenizer, RobertaModel, get_scheduler
 import pandas as pd
 import logging
 import argparse
@@ -15,7 +16,7 @@ from dataset import DepresionDataset
 import wandb
 
 
-wandb.init(project="depression-challenge", entity="nycu_adsl_depression_ycw")
+wandb.init(project="depression-challenge", entity="nycu_adsl_depression_ycw", tags=["deberta"])
 transformers_logger = logging.getLogger("transformers")
 transformers_logger.setLevel(logging.ERROR)
 
@@ -44,7 +45,7 @@ def get_argument():
                         help="learning rate")
     opt.add_argument("--epochs",
                         type=int,
-                        default=10,
+                        default=30,
                         help="epochs")
     opt.add_argument("--hidden",
                         type=int,
@@ -111,44 +112,46 @@ if __name__ == '__main__':
     val_dataloader = DataLoader(val_dataset, batch_size=config['batch_size'], shuffle=False, num_workers=16)
 
     # load pretrained model
-    deberta_tokenizer = DebertaTokenizer.from_pretrained(PRETRAINED_PATH)
-    deberta = DebertaModel.from_pretrained(PRETRAINED_PATH)
-    for param in deberta.parameters():
+    tokenizer = DebertaTokenizer.from_pretrained(PRETRAINED_PATH)
+    pretrained_model = DebertaModel.from_pretrained(PRETRAINED_PATH)
+    # tokenizer = RobertaTokenizer.from_pretrained(PRETRAINED_PATH)
+    # pretrained_model = RobertaModel.from_pretrained(PRETRAINED_PATH)
+    for param in pretrained_model.parameters():
         param.requires_grad = False
 
-    deberta_classifier = DeBERTaBaseline(config)
+    net = DeBERTaBaseline(config)
     criterion = nn.CrossEntropyLoss()
-    # deberta_classifier_optimizer = torch.optim.Adam(deberta_classifier.parameters(), lr=config['lr'])
-    optimizer = RAdam(deberta_classifier.parameters(), lr=config['lr'])
-    scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=len(train_dataloader)*config['epochs'])
+    optimizer = torch.optim.Adam(net.parameters(), lr=config['lr'])
+    # optimizer = RAdam(net.parameters(), lr=config['lr'])
+    # scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=len(train_dataloader)*config['epochs'])
 
-    deberta.to(device), deberta_classifier.to(device), criterion.to(device)
+    pretrained_model.to(device), net.to(device), criterion.to(device)
 
     # check trained parameters
-    print(sum(p.numel() for p in deberta_classifier.parameters() if p.requires_grad))
+    print(sum(p.numel() for p in net.parameters() if p.requires_grad))
 
-    wandb.watch(deberta_classifier, criterion, log="all", log_freq=1)
+    wandb.watch(net, criterion, log="all", log_freq=1)
 
     # training
     pbar = tqdm(range(config['epochs']), desc='Epoch: ')
     for epoch in pbar:
-        deberta_classifier.train()
+        net.train()
         total_loss, best_val_f1 = 0, 0
         for loader_idx, item in enumerate(train_dataloader):
             optimizer.zero_grad()
             text, label = item[0], item[1].to(device)
 
             # transform sentences to embeddings via DeBERTa
-            input_text = deberta_tokenizer(text, truncation=True, padding=True, return_tensors="pt", max_length=MAX_SEQUENCE_LENGTH).to(device)
-            output_text = deberta(**input_text)
+            input_text = tokenizer(text, truncation=True, padding=True, return_tensors="pt", max_length=MAX_SEQUENCE_LENGTH).to(device)
+            output_text = pretrained_model(**input_text)
             output_text = output_text.last_hidden_state
 
-            predicted_output = deberta_classifier(output_text)
+            predicted_output = net(output_text)
             
             loss = criterion(predicted_output, label)
             loss.backward()
             optimizer.step()
-            scheduler.step()
+            # scheduler.step()
 
             current_loss = loss.item()
             total_loss += current_loss
@@ -157,16 +160,16 @@ if __name__ == '__main__':
         # testing
         pbar.set_description("Status: Val", refresh=True)
         y_pred, y_true = [], []
-        deberta_classifier.eval()
+        net.eval()
         for loader_idx, item in enumerate(val_dataloader):
             text, label = item[0], item[1].to(device)
 
             # transform sentences to embeddings via DeBERTa
-            input_text = deberta_tokenizer(text, truncation=True, padding=True, return_tensors="pt", max_length=MAX_SEQUENCE_LENGTH).to(device)
-            output_text = deberta(**input_text)
+            input_text = tokenizer(text, truncation=True, padding=True, return_tensors="pt", max_length=MAX_SEQUENCE_LENGTH).to(device)
+            output_text = pretrained_model(**input_text)
             output_text = output_text.last_hidden_state
 
-            predicted_output = deberta_classifier(output_text)
+            predicted_output = net(output_text)
 
             _, predicted_label = torch.topk(predicted_output, 1)
 
@@ -177,7 +180,7 @@ if __name__ == '__main__':
                 y_pred += predicted_label.cpu().detach().flatten().tolist()
                 y_true += label.tolist()
 
-        precision, recall, f1, support = precision_recall_fscore_support(y_true, y_pred, average='macro')
+        precision, recall, f1, support = precision_recall_fscore_support(y_true, y_pred, average='macro', zero_division=1)
         f1 = round(f1, 5)
         precision = round(precision, 5)
         recall = round(recall, 5)
@@ -189,7 +192,7 @@ if __name__ == '__main__':
             wandb.run.summary["best_precision_macro"] = precision
             wandb.run.summary["best_recall_macro"] = recall
             best_val_f1 = f1
-            save(deberta_classifier, config, epoch=epoch)
+            save(net, config, epoch=epoch)
 
         with open(config['output_folder_name'] + 'record', 'a') as config_file:
             config_file.write(str(epoch) + ',' + str(round(total_loss/len(train_dataloader), 5)) + ',' + str(f1))
@@ -197,4 +200,4 @@ if __name__ == '__main__':
 
     config['total_loss'] = total_loss
     config['val_f1'] = best_val_f1
-    save(deberta_classifier, config)
+    save(net, config)
