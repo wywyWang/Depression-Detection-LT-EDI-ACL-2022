@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch
 import math
-from torch.optim.optimizer import Optimizer, required
+from torch.optim.optimizer import Optimizer
 from layers import MultiHeadAttention, PositionwiseFeedForward
 
 

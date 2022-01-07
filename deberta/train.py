@@ -43,7 +43,7 @@ def get_argument():
                         help="batch size")
     opt.add_argument("--lr",
                         type=int,
-                        default=2e-5,
+                        default=5e-4,
                         help="learning rate")
     opt.add_argument("--epochs",
                         type=int,
