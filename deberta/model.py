@@ -6,13 +6,15 @@ from layers import MultiHeadAttention, PositionwiseFeedForward
 
 
 class DeBERTaBaseline(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, pretrained_model):
         super().__init__()
 
         dim = config['hidden']
         dropout = config['dropout']
         head = config['head']
         n_layers = config['n_layers']
+
+        self.pretrained_model = pretrained_model
 
         self.text_embedding = nn.Sequential(
             nn.Linear(768, dim),
@@ -30,7 +32,9 @@ class DeBERTaBaseline(nn.Module):
             nn.Linear(64, 3)
         )
 
-    def forward(self, pretrained_text):
+    def forward(self, input_text):
+        pretrained_text = self.pretrained_model(**input_text)
+        pretrained_text = pretrained_text.last_hidden_state
         text_embedding = self.text_embedding(pretrained_text)
 
         gru_output, hidden = self.gru(text_embedding)
