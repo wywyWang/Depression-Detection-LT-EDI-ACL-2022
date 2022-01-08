@@ -39,11 +39,11 @@ def get_argument():
                         help="seed value")
     opt.add_argument("--batch_size",
                         type=int,
-                        default=16,
+                        default=8,
                         help="batch size")
     opt.add_argument("--lr",
                         type=int,
-                        default=5e-4,
+                        default=2e-5,
                         help="learning rate")
     opt.add_argument("--epochs",
                         type=int,
@@ -51,7 +51,7 @@ def get_argument():
                         help="epochs")
     opt.add_argument("--hidden",
                         type=int,
-                        default=256,
+                        default=512,
                         help="dimension of hidden state")
     opt.add_argument("--dropout",
                         type=int,
