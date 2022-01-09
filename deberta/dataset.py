@@ -11,18 +11,18 @@ class DepresionDataset(Dataset):
         self.mode = mode
         if mode == 'test':
             for n, row in df.iterrows():
-                self.data[n] = (row['Text_data'])
+                self.data[n] = (row['Text_data'], row['summarized_text'])
         else:
             for n, row in df.iterrows():
-                self.data[n] = (row['Text_data'], row['Label'])
+                self.data[n] = (row['Text_data'], row['summarized_text'], row['Label'])
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
         if self.mode == 'test':
-            text = self.data[idx]
-            return (text)
+            text, summarized_text = self.data[idx]
+            return (text, summarized_text)
         else:
-            text, label = self.data[idx]
-            return (text, torch.tensor(label, dtype=torch.long))
+            text, summarized_text, label = self.data[idx]
+            return (text, summarized_text, torch.tensor(label, dtype=torch.long))

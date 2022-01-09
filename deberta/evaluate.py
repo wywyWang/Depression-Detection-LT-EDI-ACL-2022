@@ -22,7 +22,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 MODEL_TYPE = "deberta"
 PRETRAINED_PATH = 'microsoft/deberta-base'
 MAX_SEQUENCE_LENGTH = 512
-device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 
 def set_seed(seed_value):
@@ -41,7 +41,7 @@ if __name__ == '__main__':
 
     # read tsv data
     # NOTE: should change the column name in dev_with_labels.tsv to 'Text_data'
-    df_val = pd.read_csv('../data/dev_with_labels.tsv', sep='\t')
+    df_val = pd.read_csv('../data/val_summarized.csv')
 
     category = {
         'moderate': 0,
@@ -68,8 +68,8 @@ if __name__ == '__main__':
         param.requires_grad = False
 
     net = DeBERTaBaseline(config).to(device)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.RAdam(net.parameters(), lr=config['lr'])
+    # criterion = nn.CrossEntropyLoss()
+    # optimizer = torch.optim.RAdam(net.parameters(), lr=config['lr'])
     
     net.load_state_dict(torch.load(model_path + '{}model'.format(best_model_epoch)))
 
@@ -80,13 +80,17 @@ if __name__ == '__main__':
     y_pred = []
     net.eval()
     for loader_idx, item in tqdm(enumerate(val_dataloader), total=len(val_dataloader)):
-        text = list(item[0])
+        text, summarized_text = list(item[0]), list(item[1])
 
         # transform sentences to embeddings via DeBERTa
         input_text = tokenizer(text, truncation=True, padding=True, return_tensors="pt", max_length=MAX_SEQUENCE_LENGTH).to(device)
         output_text = pretrained_model(**input_text)
 
-        predicted_output = net(output_text.last_hidden_state)
+        # transform sentences to embeddings via DeBERTa
+        summarized_input_text = tokenizer(summarized_text, truncation=True, padding=True, return_tensors="pt", max_length=MAX_SEQUENCE_LENGTH).to(device)
+        summarized_output_text = pretrained_model(**summarized_input_text)
+
+        predicted_output = net(output_text.last_hidden_state, summarized_output_text.last_hidden_state)
 
         # generate probabilities
         softmax = nn.Softmax(dim=1)
@@ -101,4 +105,4 @@ if __name__ == '__main__':
             y_pred += predicted_output.cpu().detach().tolist()
 
     answer = pd.DataFrame(y_pred, columns=category.keys())
-    answer.to_csv('{}answer.csv'.format(model_path))
+    answer.to_csv('{}answer.csv'.format(model_path), index=False)

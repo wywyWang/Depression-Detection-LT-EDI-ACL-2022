@@ -11,8 +11,8 @@ transformers_logger.setLevel(logging.ERROR)
 
 
 if __name__ == '__main__':
-    df_train = pd.read_csv('../data/train_preprocess.tsv', sep='\t')
-    df_val = pd.read_csv('../data/val_preprocess.tsv', sep='\t')
+    df_train = pd.read_csv('../data/train_preprocess.csv')
+    df_val = pd.read_csv('../data/val_preprocess.csv')
 
     summarizer = pipeline("summarization", model='facebook/bart-base', tokenizer='facebook/bart-base')
 
