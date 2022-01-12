@@ -13,6 +13,10 @@ from model import DeBERTaBaseline
 from dataset import DepresionDataset
 
 import wandb
+from pytorch_metric_learning import losses
+from pytorch_metric_learning.distances import CosineSimilarity
+from pytorch_metric_learning.utils.inference import InferenceModel, MatchFinder
+from torchsampler import ImbalancedDatasetSampler
 
 
 wandb.init(project="depression-challenge", entity="nycu_adsl_depression_ycw", tags=["deberta"])
@@ -21,12 +25,15 @@ wandb.init(project="depression-challenge", entity="nycu_adsl_depression_ycw", ta
 transformers_logger = logging.getLogger("transformers")
 transformers_logger.setLevel(logging.ERROR)
 
+GPU_NUM = '1'
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["CUDA_VISIBLE_DEVICES"] = GPU_NUM
 
 MODEL_TYPE = "deberta"
 PRETRAINED_PATH = 'microsoft/deberta-base'
 MAX_SEQUENCE_LENGTH = 512
-device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def get_argument():
@@ -44,11 +51,15 @@ def get_argument():
                         help="batch size")
     opt.add_argument("--lr",
                         type=int,
-                        default=2e-5,
+                        default=1e-4,
+                        help="learning rate")
+    opt.add_argument("--lambda",
+                        type=int,
+                        default=0.5,
                         help="learning rate")
     opt.add_argument("--epochs",
                         type=int,
-                        default=30,
+                        default=60,
                         help="epochs")
     opt.add_argument("--hidden",
                         type=int,
@@ -62,6 +73,10 @@ def get_argument():
                         type=int,
                         default=4,
                         help="number of heads")
+    opt.add_argument("--optimizer",
+                        type=str,
+                        default='adam',
+                        help="optimizer")
     opt.add_argument("--n_layers",
                         type=int,
                         default=2,
@@ -116,7 +131,7 @@ if __name__ == '__main__':
 
     # prepare to dataloader
     train_dataset = DepresionDataset(df_train, mode='train')
-    train_dataloader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=16)
+    train_dataloader = DataLoader(train_dataset, sampler=ImbalancedDatasetSampler(train_dataset), batch_size=config['batch_size'], shuffle=False, num_workers=16)
     val_dataset = DepresionDataset(df_val, mode='train')
     val_dataloader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=16)
 
@@ -127,9 +142,12 @@ if __name__ == '__main__':
         param.requires_grad = False
 
     net = DeBERTaBaseline(config).to(device)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(net.parameters(), lr=config['lr'])
-    # optimizer = torch.optim.RAdam(net.parameters(), lr=config['lr'])
+    criterion = nn.CrossEntropyLoss().to(device)
+    loss_func = losses.SupConLoss().to(device)
+    if config['optimizer'] == 'adam':
+        optimizer = torch.optim.Adam(net.parameters(), lr=config['lr'])
+    elif config['optimizer'] == 'radam':
+        optimizer = torch.optim.RAdam(net.parameters(), lr=config['lr'])
     # scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=len(train_dataloader)*config['epochs'])
 
     # check trained parameters
@@ -143,19 +161,22 @@ if __name__ == '__main__':
         total_loss = 0
         for loader_idx, item in enumerate(train_dataloader):
             optimizer.zero_grad()
-            text, summarized_text, label = list(item[0]), list(item[1]), item[2].to(device)
+            text, label = list(item[0]), item[1].to(device)
 
             # transform sentences to embeddings via DeBERTa
             input_text = tokenizer(text, truncation=True, padding=True, return_tensors="pt", max_length=MAX_SEQUENCE_LENGTH).to(device)
             output_text = pretrained_model(**input_text)
 
-            # transform sentences to embeddings via DeBERTa
-            summarized_input_text = tokenizer(summarized_text, truncation=True, padding=True, return_tensors="pt", max_length=MAX_SEQUENCE_LENGTH).to(device)
-            summarized_output_text = pretrained_model(**summarized_input_text)
+            # # transform sentences to embeddings via DeBERTa
+            # summarized_input_text = tokenizer(summarized_text, truncation=True, padding=True, return_tensors="pt", max_length=MAX_SEQUENCE_LENGTH).to(device)
+            # summarized_output_text = pretrained_model(**summarized_input_text)
 
-            predicted_output = net(output_text.last_hidden_state, summarized_output_text.last_hidden_state)
-            
-            loss = criterion(predicted_output, label)
+            predicted_output, embeddings = net(output_text.last_hidden_state)
+            ce_loss = criterion(predicted_output, label)
+
+            # embeddings = net(output_text.last_hidden_state)
+            scl_loss = loss_func(embeddings, label)
+            loss = config['lambda'] * ce_loss + (1 - config['lambda']) * scl_loss
             loss.backward()
             optimizer.step()
             # scheduler.step()
@@ -164,23 +185,66 @@ if __name__ == '__main__':
             total_loss += current_loss
             pbar.set_description("Status: Train, Loss: {}".format(round(current_loss, 3)), refresh=True)
 
+
         # testing
         pbar.set_description("Status: Val", refresh=True)
         y_pred, y_true = [], []
         net.eval()
-        for loader_idx, item in enumerate(val_dataloader):
-            text, summarized_text, label = list(item[0]), list(item[1]), item[2].to(device)
+
+        # # metric learning
+        # match_finder = MatchFinder(distance=CosineSimilarity(), threshold=0.7)
+        # inference_model = InferenceModel(net, match_finder=match_finder)
+        # knn_labels = []
+
+        # for loader_idx, item in enumerate(train_dataloader):
+        #     text, label = list(item[0]), item[1].to(device)
+
+        #     knn_labels.append(label.cpu().tolist())
+
+        #     # transform sentences to embeddings via DeBERTa
+        #     input_text = tokenizer(text, truncation=True, padding=True, return_tensors="pt", max_length=MAX_SEQUENCE_LENGTH).to(device)
+        #     output_text = pretrained_model(**input_text)
+
+        #     if loader_idx == 0:
+        #         inference_model.train_knn(output_text.last_hidden_state)
+        #     else:
+        #         inference_model.add_to_knn(output_text.last_hidden_state)
+
+        # knn_labels = [item for sublist in knn_labels for item in sublist]
+
+        # for loader_idx, item in tqdm(enumerate(val_dataloader), total=len(val_dataloader)):
+        #     text, label = list(item[0]), item[1].to(device)
+
+        #     # transform sentences to embeddings via DeBERTa
+        #     input_text = tokenizer(text, truncation=True, padding=True, return_tensors="pt", max_length=MAX_SEQUENCE_LENGTH).to(device)
+        #     output_text = pretrained_model(**input_text)
+
+        #     # predicted_output = net(output_text.last_hidden_state)
+        #     # _, predicted_label = torch.topk(embeddings, 1)
+
+        #     distances, indices = inference_model.get_nearest_neighbors(output_text.last_hidden_state, k=10)
+
+        #     neighbor_labels = [0 for _ in range(3)]
+        #     for knn_index in indices[0]:
+        #         neighbor_labels[knn_labels[knn_index]] += 1
+        #     predicted_label = neighbor_labels.index(max(neighbor_labels))
+
+        #     if len(y_pred) == 0:
+        #         y_pred = [predicted_label]
+        #         y_true = label.tolist()
+        #     else:
+        #         y_pred += [predicted_label]
+        #         y_true += label.tolist()
+
+        # original ce
+        for loader_idx, item in tqdm(enumerate(val_dataloader), total=len(val_dataloader)):
+            text, label = list(item[0]), item[1].to(device)
 
             # transform sentences to embeddings via DeBERTa
             input_text = tokenizer(text, truncation=True, padding=True, return_tensors="pt", max_length=MAX_SEQUENCE_LENGTH).to(device)
             output_text = pretrained_model(**input_text)
 
-            # transform sentences to embeddings via DeBERTa
-            summarized_input_text = tokenizer(summarized_text, truncation=True, padding=True, return_tensors="pt", max_length=MAX_SEQUENCE_LENGTH).to(device)
-            summarized_output_text = pretrained_model(**summarized_input_text)
-
-            predicted_output = net(output_text.last_hidden_state, summarized_output_text.last_hidden_state)
-
+            predicted_output, embeddings = net(output_text.last_hidden_state)
             _, predicted_label = torch.topk(predicted_output, 1)
 
             if len(y_pred) == 0:

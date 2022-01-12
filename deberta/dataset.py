@@ -8,21 +8,26 @@ class DepresionDataset(Dataset):
         super().__init__()
 
         self.data = {}
+        self.labels = {}
         self.mode = mode
         if mode == 'test':
             for n, row in df.iterrows():
-                self.data[n] = (row['Text_data'], row['summarized_text'])
+                self.data[n] = (row['Text_data'])
         else:
             for n, row in df.iterrows():
-                self.data[n] = (row['Text_data'], row['summarized_text'], row['Label'])
+                self.labels[n] = row['Label']
+                self.data[n] = (row['Text_data'], row['Label'])
 
     def __len__(self):
         return len(self.data)
 
+    def get_labels(self):
+        return self.labels
+
     def __getitem__(self, idx):
         if self.mode == 'test':
-            text, summarized_text = self.data[idx]
-            return (text, summarized_text)
+            text = self.data[idx]
+            return (text)
         else:
-            text, summarized_text, label = self.data[idx]
-            return (text, summarized_text, torch.tensor(label, dtype=torch.long))
+            text, label = self.data[idx]
+            return (text, torch.tensor(label, dtype=torch.long))
