@@ -20,6 +20,10 @@ MODEL = {
     "electra":{
         "pretrain": "google/electra-base-discriminator",
         "name": "electra-base-discriminator"
+    },
+    "deberta":{
+        "pretrain": "microsoft/deberta-v3-base",
+        "name": "deberta-v3-base"
     }
 }
 EPOCHS = 30
@@ -57,8 +61,7 @@ def train(model_type, train_path, dev_path):
     set_wandb(model_type)
     set_seed()
     train_dataloader, dev_dataloader = prepare_data(train_path, dev_path)
-    # device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    device = torch.device("cpu")
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model = AutoModelForSequenceClassification.from_pretrained(MODEL[model_type]["pretrain"], num_labels=3).to(device)
     tokenizer = AutoTokenizer.from_pretrained(MODEL[model_type]["pretrain"])
     optimizer = AdamW(model.parameters(), lr=LR)
@@ -108,5 +111,5 @@ def train(model_type, train_path, dev_path):
 if __name__ == '__main__':
     model_type = sys.argv[1]
     if model_type not in MODEL.keys():
-        raise ValueError(f"{model_type} is not a valid model type [roberta, electra]")
+        raise ValueError(f"{model_type} is not a valid model type [roberta, electra, deberta]")
     train(model_type, train_path='../data/train.tsv', dev_path='../data/dev_with_labels.tsv')
