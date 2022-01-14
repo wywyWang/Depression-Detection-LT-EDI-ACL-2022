@@ -1,6 +1,7 @@
 from transformers import AutoTokenizer, AutoModelForSequenceClassification,\
                          AdamW, get_scheduler  
 from dataset import DepressDataset
+from model import Model
 from sklearn.metrics import precision_recall_fscore_support
 import pandas as pd
 import logging
@@ -10,6 +11,7 @@ import torch.nn as nn
 from torch.optim import RAdam
 from torch.utils.data import DataLoader
 from torchsampler import ImbalancedDatasetSampler
+from pytorch_metric_learning import losses
 import wandb
 import sys
 import os
@@ -24,8 +26,8 @@ MODEL = {
         "name": "google-electra-base-discriminator"
     },
     "deberta":{
-        "pretrain": "microsoft/deberta-v3-base",
-        "name": "deberta-v3-base"
+        "pretrain": "microsoft/deberta-base",
+        "name": "deberta-base"
     },
     "longformer":{
         "pretrain": "allenai/longformer-base-4096",
@@ -37,8 +39,11 @@ LR = 2e-5
 BATCH_SIZE = 4
 SEED = 17
 WARM_UP = 5
+HIDDEN = 768
+DROPOUT = 0.3
+LAMBDA = 0.5
 
-GPU_NUM = '0'
+GPU_NUM = '2'
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["CUDA_VISIBLE_DEVICES"] = GPU_NUM
@@ -54,7 +59,9 @@ def set_wandb(model_type):
         "lr": LR,
         "batch_size": BATCH_SIZE,
         "seed": SEED,
-        "warm_up": WARM_UP
+        "warm_up": WARM_UP,
+        "hidden": HIDDEN,
+        "dropout": DROPOUT
     })
 
 def set_seed():
@@ -71,18 +78,25 @@ def prepare_data(train_path, dev_path):
     return train_dataloader, dev_dataloader
 
 def train(model_type, train_path, dev_path):
+    config = {
+        'dropout': DROPOUT,
+        'hidden': HIDDEN
+    }
     set_wandb(model_type)
     set_seed()
     train_dataloader, dev_dataloader = prepare_data(train_path, dev_path)
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    model = AutoModelForSequenceClassification.from_pretrained(MODEL[model_type]["pretrain"], num_labels=3)
-    model.to(device)
-    # model = nn.DataParallel(model).to(device)
+
+    # model = AutoModelForSequenceClassification.from_pretrained(MODEL[model_type]["pretrain"], num_labels=3)
+    # model.to(device)
+    model = Model(MODEL[model_type]["pretrain"], config).to(device)
+    
     tokenizer = AutoTokenizer.from_pretrained(MODEL[model_type]["pretrain"])
     optimizer = AdamW(model.parameters(), lr=LR)
     # optimizer = RAdam(model.parameters(), lr=LR)
     scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=WARM_UP, num_training_steps=len(train_dataloader)*EPOCHS)
     criterion = nn.CrossEntropyLoss() 
+    # loss_func = losses.SupConLoss().to(device)
     # check trained parameters
     print("Parameters to train:", sum(p.numel() for p in model.parameters() if p.requires_grad))
 
@@ -95,8 +109,14 @@ def train(model_type, train_path, dev_path):
             optimizer.zero_grad()
             text, label = list(data[0]), data[1].to(device)
             input_text = tokenizer(text, padding=True, truncation=True, max_length=512, return_tensors="pt").to(device)
-            outputs = model(**input_text).logits
-            loss = criterion(outputs, label)
+            # logits = model(**input_text).logits
+
+            logits, pooled_output = model(**input_text)
+            # ce_loss = criterion(logits, label)
+            # scl_loss = loss_func(pooled_output, label)
+            # loss = LAMBDA * ce_loss + (1-LAMBDA) * scl_loss
+
+            loss = criterion(logits, label)
             total_loss += loss.item()
             loss.backward()
             optimizer.step()
@@ -109,8 +129,11 @@ def train(model_type, train_path, dev_path):
             text, label = list(data[0]), data[1].to(device)
             input_text = tokenizer(text, padding=True, truncation=True, max_length=512, return_tensors="pt").to(device)
             with torch.no_grad():
-                outputs = model(**input_text).logits
-            pred.append(torch.argmax(outputs, dim=-1).cpu().numpy())
+                # logits = model(**input_text).logits
+
+                logits, pooled_output = model(**input_text)
+
+            pred.append(torch.argmax(logits, dim=-1).cpu().numpy())
             labels.append(label.cpu().numpy())
         precision, recall, f1, support = precision_recall_fscore_support(labels, pred, average='macro', zero_division=1)
         precision = round(precision, 4)
