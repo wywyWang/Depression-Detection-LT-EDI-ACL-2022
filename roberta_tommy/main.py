@@ -40,10 +40,10 @@ BATCH_SIZE = 4
 SEED = 17
 WARM_UP = 5
 HIDDEN = 768
-DROPOUT = 0.3
+DROPOUT = 0.1
 LAMBDA = 0.5
 
-GPU_NUM = '2'
+GPU_NUM = '3'
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["CUDA_VISIBLE_DEVICES"] = GPU_NUM
@@ -96,7 +96,7 @@ def train(model_type, train_path, dev_path):
     # optimizer = RAdam(model.parameters(), lr=LR)
     scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=WARM_UP, num_training_steps=len(train_dataloader)*EPOCHS)
     criterion = nn.CrossEntropyLoss() 
-    # loss_func = losses.SupConLoss().to(device)
+    loss_func = losses.SupConLoss().to(device)
     # check trained parameters
     print("Parameters to train:", sum(p.numel() for p in model.parameters() if p.requires_grad))
 
@@ -112,11 +112,11 @@ def train(model_type, train_path, dev_path):
             # logits = model(**input_text).logits
 
             logits, pooled_output = model(**input_text)
-            # ce_loss = criterion(logits, label)
-            # scl_loss = loss_func(pooled_output, label)
-            # loss = LAMBDA * ce_loss + (1-LAMBDA) * scl_loss
+            ce_loss = criterion(logits, label)
+            scl_loss = loss_func(pooled_output, label)
+            loss = LAMBDA * ce_loss + (1-LAMBDA) * scl_loss
 
-            loss = criterion(logits, label)
+            # loss = criterion(logits, label)
             total_loss += loss.item()
             loss.backward()
             optimizer.step()

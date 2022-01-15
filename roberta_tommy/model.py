@@ -20,8 +20,9 @@ class Model(nn.Module):
 
         self.gelu = nn.GELU()
 
-        self.classifier.apply(self.init_weights)
+        # self.classifier.apply(self.init_weights)
         torch.nn.init.orthogonal_(self.dense.weight)
+        torch.nn.init.orthogonal_(self.classifier.weight)
     
     def init_weights(self, m):
         if isinstance(m, nn.Linear):

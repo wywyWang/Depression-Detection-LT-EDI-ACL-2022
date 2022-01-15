@@ -9,12 +9,18 @@ import sys
 import pandas as pd
 from tqdm import tqdm
 from torch.utils.data import DataLoader
+from model import Model
 
-MODEL1 = 'google/electra-base-discriminator'
-# MODEL2_NAME = 'electra-base-discriminator_0.5485'
-MODEL1_NAME = 'electra-base-discriminator_0.5711'
+MODEL = 'google/electra-base-discriminator'
+MODEL_NAME = 'google-electra-base-discriminator_0.5706'
+EPOCHS = 30
+LR = 2e-5
 BATCH_SIZE = 4
 SEED = 17
+WARM_UP = 5
+HIDDEN = 768
+DROPOUT = 0.1
+LAMBDA = 0.5
 
 GPU_NUM = '0'
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -34,11 +40,16 @@ def prepare_data(dev_path):
     return dev_dataloader
 
 def test(dev_path):
+    config = {
+        'dropout': DROPOUT,
+        'hidden': HIDDEN
+    }
     set_seed()
     val_dataloader = prepare_data(dev_path)
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    model1 = AutoModelForSequenceClassification.from_pretrained(MODEL1, num_labels=3).to(device)
-    tokenizer1 = AutoTokenizer.from_pretrained(MODEL1)
+    # model1 = AutoModelForSequenceClassification.from_pretrained(MODEL1, num_labels=3).to(device)
+    model = Model(MODEL, config).to(device)
+    tokenizer = AutoTokenizer.from_pretrained(MODEL)
     # check trained parameters
 
     category = {
@@ -48,22 +59,23 @@ def test(dev_path):
     }
 
     inverse_category = {
-        0: 'moderate',
-        1: 'severe',
-        2: 'not depression'
+        1: 'moderate',
+        2: 'severe',
+        0: 'not depression'
     }
 
-    model1.load_state_dict(torch.load(f"../model/{MODEL1_NAME}.pt"))
+    model.load_state_dict(torch.load(f"../model/{MODEL_NAME}.pt"))
 
-    model1.eval()
+    model.eval()
     y_pred = []
     labels = []
     pbar = tqdm(enumerate(val_dataloader), total=len(val_dataloader))
     for idx, data in pbar:
         text, label = list(data[0]), data[1].to(device)
-        input_text1 = tokenizer1(text, padding=True, truncation=True, max_length=512, return_tensors="pt").to(device)
+        input_text = tokenizer(text, padding=True, truncation=True, max_length=512, return_tensors="pt").to(device)
         with torch.no_grad():
-            predicted_output = model1(**input_text1).logits
+            # predicted_output = model1(**input_text1).logits
+            predicted_output, pooled_output = model(**input_text)
 
         softmax = nn.Softmax(dim=1)
         predicted_output = softmax(predicted_output)
@@ -76,7 +88,7 @@ def test(dev_path):
         pbar.set_description("y_pred len: {}".format(len(y_pred)), refresh=True)
 
     answer = pd.DataFrame(y_pred, columns=category.keys())
-    answer.to_csv('../prediction/{}answer.csv'.format(MODEL1_NAME), index=False)
+    answer.to_csv('../prediction/{}answer.csv'.format(MODEL_NAME), index=False)
 
 
 if __name__ == '__main__':
