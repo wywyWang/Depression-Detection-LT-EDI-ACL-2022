@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+import time
 import argparse
 import wandb
 import matplotlib.pyplot as plt
@@ -14,13 +15,21 @@ from sklearn.metrics import classification_report
 import lightgbm as lgb
 from lightgbm import LGBMClassifier
 
+from nltk.tokenize import TweetTokenizer 
+from sklearn.pipeline import Pipeline
+from gensim.models import KeyedVectors
+from gensim.scripts.glove2word2vec import glove2word2vec
+
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import ExtraTreesClassifier
+
 def read_input():
     '''
     Read tsv data
     NOTE: should change the column name in dev_with_labels.tsv to 'Text_data'    
     '''
-    df_train = pd.read_csv('./data/train_np.tsv', sep='\t')
-    df_val = pd.read_csv('./data/val_np.tsv', sep='\t')
+    df_train = pd.read_csv('../data/train_np.tsv', sep='\t')
+    df_val = pd.read_csv('../data/val_np.tsv', sep='\t')
 
     return df_train, df_val
 
@@ -35,8 +44,8 @@ def change_format(df_train, df_val):
     df_val['Label'] = df_val['Label'].map(category)
 
     ## drop some columns
-    df_train = df_train.drop(columns=['Unnamed: 0', 'PID', 'Text_data', 'flair_sentiment'])
-    df_val = df_val.drop(columns=['Unnamed: 0', 'PID', 'Text data', 'flair_sentiment'])
+    df_train = df_train.drop(columns=['Unnamed: 0', 'PID',  'flair_sentiment'])
+    df_val = df_val.drop(columns=['Unnamed: 0', 'PID',  'flair_sentiment'])
 
     return df_train, df_val
 
@@ -44,6 +53,58 @@ def f1_eval(y_pred, dtrain):
     y_true = dtrain.get_label()
     err = 1-f1_score(y_true, np.round(y_pred))
     return 'f1_err', err
+
+def tokenizer(text):
+    # Create a reference variable for Class TweetTokenizer 
+    tk = TweetTokenizer() 
+
+    # Use tokenize method 
+    token = tk.tokenize(text)
+
+    return token
+
+def text_xgboost(df_train, df_val):
+
+    df_train['Text_data'] = df_train['Text_data'].apply(tokenizer)
+    df_val['Text data'] = df_val['Text data'].apply(tokenizer)
+
+
+    with open('glove.6B.50d.txt', 'rb') as lines:
+        w2v = {line.split()[0]: np.array(map(float, line.split()[1:]))
+            for line in lines}
+
+    class MeanEmbeddingVectorizer(object):
+        def __init__(self, word2vec):
+            self.word2vec = word2vec
+            self.dim = len(word2vec)
+
+        def fit(self, X, y):
+            return self
+
+        def transform(self, X):
+            return np.array([
+                np.mean([self.word2vec[w] for w in words if w in self.word2vec]
+                        or [np.zeros(self.dim)], axis=0)
+                for words in X
+            ])
+
+    xgb = XGBClassifier(learning_rate=0.01, n_estimators=100)
+
+    w2v_xgb = Pipeline([
+        ('word2vec vectorizer', MeanEmbeddingVectorizer(w2v)),
+        ('extra trees',xgb)
+    ])
+    
+    start = time.time()
+    w2v_xgb.fit(df_train['Text_data'], df_train['Label'])
+    elapse = time.time() - start
+    print('elapsed: ', elapse)
+    y_train_pred = w2v_xgb.predict(df_train['Text_data'])
+    print('Xgboost training F1:', f1_score(df_train['Label'], y_train_pred, average='macro'))
+
+    y_test_pred = w2v_xgb.predict(df_val['Text data'])
+    print('Xgboost validation F1:', f1_score(df_val['Label'], y_test_pred, average='macro'))
+
 
 def xgboost(df_train, df_val):
     xgboostModel = XGBClassifier(n_estimators=100, gamma = 0.1, max_depth = 4, subsample = 1, learning_rate = 0.1)
@@ -107,4 +168,5 @@ if __name__ == '__main__':
     df_train, df_val = change_format(df_train, df_val)
 
     # xgboost(df_train, df_val)
-    lgbm(df_train, df_val, printFeatureImportance)
+    # lgbm(df_train, df_val, printFeatureImportance)
+    text_xgboost(df_train, df_val)
