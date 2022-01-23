@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from torchsampler import ImbalancedDatasetSampler
 from pytorch_metric_learning import losses
 import wandb
-import sys
+import argparse
 
 MODEL = {
     "roberta":{
@@ -29,45 +29,57 @@ MODEL = {
         "name": "deberta-v3-base"
     }
 }
-EPOCHS = 30
+EPOCHS = 20
 LR = 2e-5
-BATCH_SIZE = 1
+BATCH_SIZE = 2
 SEED = 17
 WARM_UP = 5
 LOSS_LAMBDA = 0
 WEIGHT_DECAY = 0.01
 LLR_DECAY = 0.9
 
-def set_wandb(model_type):
-    wandb.init(project="depression-challenge", entity="nycu_adsl_depression_ycw", tags=[model_type])
+def set_arg():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model_type', type=str, default='roberta', help='model type', choices=MODEL.keys())
+    parser.add_argument('--train_path', type=str, default='../data/train.tsv', help='train path')
+    parser.add_argument('--dev_path', type=str, default='../data/dev_with_labels.tsv', help='dev path')
+    parser.add_argument('--epochs', type=int, default=EPOCHS, help='epochs')
+    parser.add_argument('--lr', type=float, default=LR, help='learning rate')
+    parser.add_argument('--batch_size', type=int, default=BATCH_SIZE, help='batch size')
+    parser.add_argument('--seed', type=int, default=SEED, help='seed')
+    parser.add_argument('--warm_up', type=int, default=WARM_UP, help='warm up')
+    return parser.parse_args()
+
+def set_wandb(args):
+    wandb.init(project="depression-challenge", entity="nycu_adsl_depression_ycw", tags=[args.model_type])
     wandb.config = {
-        "MODEL": MODEL[model_type]["pretrain"],
-        "MODEL_NAME": MODEL[model_type]["name"],
-        "EPOCHS": EPOCHS,
-        "LR": LR,
-        "BATCH_SIZE": BATCH_SIZE,
-        "SEED": SEED,
+        "MODEL": MODEL[args.model_type]["pretrain"],
+        "MODEL_NAME": MODEL[args.model_type]["name"],
+        "EPOCHS": args.epochs,
+        "LR": args.lr,
+        "BATCH_SIZE": args.batch_size,
+        "SEED": args.seed,
         "WARM_UP": WARM_UP,
         "LOSS_LAMBDA": LOSS_LAMBDA,
         "WEIGHT_DECAY": WEIGHT_DECAY,
         "LLR_DECAY": LLR_DECAY
     }
 
-def set_seed():
-    torch.manual_seed(SEED)
-    torch.cuda.manual_seed(SEED)
-    torch.cuda.manual_seed_all(SEED)  # if you are using multi-GPU.
-    np.random.seed(SEED)  # Numpy module.
-    random.seed(SEED)  # Python random module.
-    torch.manual_seed(SEED)
+def set_seed(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
+    np.random.seed(seed)  # Numpy module.
+    random.seed(seed)  # Python random module.
+    torch.manual_seed(seed)
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
 
-def prepare_data(train_path, dev_path):
+def prepare_data(train_path, dev_path, batch_size):
     train_data = DepressDataset(train_path, mode='train')
     dev_data = DepressDataset(dev_path, mode='test')
-    train_dataloader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
-    # train_dataloader = DataLoader(train_data, batch_size=BATCH_SIZE, sampler=ImbalancedDatasetSampler(train_data))
+    train_dataloader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+    # train_dataloader = DataLoader(train_data, batch_size=batch_size, sampler=ImbalancedDatasetSampler(train_data))
     dev_dataloader = DataLoader(dev_data, batch_size=1, shuffle=False)
     return train_dataloader, dev_dataloader
 
@@ -106,13 +118,13 @@ def get_optimizer_grouped_parameters(
         ]
     return optimizer_grouped_parameters
 
-def train(model_type, train_path, dev_path):
-    set_wandb(model_type)
-    set_seed()
-    train_dataloader, dev_dataloader = prepare_data(train_path, dev_path)
+def train(args):
+    set_wandb(args)
+    set_seed(args.seed)
+    train_dataloader, dev_dataloader = prepare_data(args.train_path, args.dev_path, args.batch_size)
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    model = AutoModelForSequenceClassification.from_pretrained(MODEL[model_type]["pretrain"], num_labels=3).to(device)
-    tokenizer = AutoTokenizer.from_pretrained(MODEL[model_type]["pretrain"])
+    model = AutoModelForSequenceClassification.from_pretrained(MODEL[args.model_type]["pretrain"], num_labels=3).to(device)
+    tokenizer = AutoTokenizer.from_pretrained(MODEL[args.model_type]["pretrain"])
     if tokenizer.pad_token is None:
         tokenizer.add_special_tokens({'pad_token': '[PAD]'})
     # grouped_optimizer_params = get_optimizer_grouped_parameters(
@@ -120,9 +132,9 @@ def train(model_type, train_path, dev_path):
     #     LR, WEIGHT_DECAY, 
     #     LLR_DECAY
     # )
-    optimizer = AdamW(model.parameters(), lr=LR)
-    # optimizer = AdamW(grouped_optimizer_params, lr=LR)
-    scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=WARM_UP, num_training_steps=len(train_dataloader)*EPOCHS)
+    optimizer = AdamW(model.parameters(), lr=args.lr)
+    # optimizer = AdamW(grouped_optimizer_params, lr=args.lr)
+    scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=WARM_UP, num_training_steps=len(train_dataloader)*args.epochs)
     CE_loss = nn.CrossEntropyLoss().to(device)
     Sup_loss = losses.SupConLoss().to(device)
     # check trained parameters
@@ -166,11 +178,10 @@ def train(model_type, train_path, dev_path):
         wandb.log({"epoch": epoch, "f1": f1, "train loss": avg_loss, "precision": precision, "recall": recall, "support": support})
         if f1 > best_f1:
             best_f1 = f1
-            torch.save(model.state_dict(), f"../model/{MODEL[model_type]['name']}_{f1}.pt")
+            torch.save(model.state_dict(), f"../model/{MODEL[args.model_type]['name']}_{f1}.pt")
+    wandb.log({"best_f1_macro": best_f1})
 
 
 if __name__ == '__main__':
-    model_type = sys.argv[1]
-    if model_type not in MODEL.keys():
-        raise ValueError(f"{model_type} is not a valid model type {list(MODEL.keys())}")
-    train(model_type, train_path='../data/train.tsv', dev_path='../data/dev_with_labels.tsv')
+    args = set_arg()
+    train(args)
