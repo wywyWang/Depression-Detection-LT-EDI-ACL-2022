@@ -11,18 +11,35 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 from model import Model
 
-MODEL = 'google/electra-base-discriminator'
-MODEL_NAME = 'google-electra-base-discriminator_0.5706'
-EPOCHS = 30
-LR = 2e-5
-BATCH_SIZE = 4
+MODEL = 'microsoft/deberta-base'
+MODEL_NAME = 'deberta-base_0.5521'
+# MODEL = 'cardiffnlp/twitter-roberta-base-sentiment'
+# MODEL_NAME = 'twitter-roberta-base-sentiment_0.5479'
+# MODEL = 'google/electra-base-discriminator'
+# MODEL_NAME = 'google-electra-base-discriminator_0.5775'
+# # electra and roberta
+# EPOCHS = 30
+# LR = 4e-5
+# BATCH_SIZE = 8
+# SEED = 17
+# WARM_UP = 5
+# HIDDEN = 512
+# DROPOUT = 0.1
+# LAMBDA = 0.7
+# LAMBDA2 = 0.3
+
+# deberta
+EPOCHS = 20
+LR = 4e-5
+BATCH_SIZE = 8
 SEED = 17
 WARM_UP = 5
-HIDDEN = 768
-DROPOUT = 0.1
-LAMBDA = 0.5
+HIDDEN = 1024
+DROPOUT = 0.2
+LAMBDA = 0.3
+LAMBDA2 = 0.3
 
-GPU_NUM = '0'
+GPU_NUM = '2,3'
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["CUDA_VISIBLE_DEVICES"] = GPU_NUM
@@ -45,12 +62,12 @@ def test(dev_path):
         'hidden': HIDDEN
     }
     set_seed()
+    df_val = pd.read_csv(dev_path, sep='\t')
     val_dataloader = prepare_data(dev_path)
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     # model1 = AutoModelForSequenceClassification.from_pretrained(MODEL1, num_labels=3).to(device)
-    model = Model(MODEL, config).to(device)
+    model = nn.DataParallel(Model(MODEL, config)).to(device)
     tokenizer = AutoTokenizer.from_pretrained(MODEL)
-    # check trained parameters
 
     category = {
         'moderate': 1,
@@ -68,14 +85,12 @@ def test(dev_path):
 
     model.eval()
     y_pred = []
-    labels = []
     pbar = tqdm(enumerate(val_dataloader), total=len(val_dataloader))
     for idx, data in pbar:
-        text, label = list(data[0]), data[1].to(device)
+        text, vad_score = list(data[0]), data[1].to(device)
         input_text = tokenizer(text, padding=True, truncation=True, max_length=512, return_tensors="pt").to(device)
         with torch.no_grad():
-            # predicted_output = model1(**input_text1).logits
-            predicted_output, pooled_output = model(**input_text)
+            predicted_output, pretrained_output, vad_embedding = model(vad_score=vad_score, **input_text)
 
         softmax = nn.Softmax(dim=1)
         predicted_output = softmax(predicted_output)
@@ -88,8 +103,10 @@ def test(dev_path):
         pbar.set_description("y_pred len: {}".format(len(y_pred)), refresh=True)
 
     answer = pd.DataFrame(y_pred, columns=category.keys())
+    answer['PID'] = df_val['PID'].values
+    answer = answer[['PID', 'moderate', 'severe', 'not depression']]
     answer.to_csv('../prediction/{}answer.csv'.format(MODEL_NAME), index=False)
 
 
 if __name__ == '__main__':
-    test(dev_path='../data/dev_with_labels.tsv')
+    test(dev_path='../data/valid_np.tsv')

@@ -13,16 +13,23 @@ from model import DeBERTaBaseline
 from dataset import DepresionDataset
 
 import wandb
+from pytorch_metric_learning import losses
+from pytorch_metric_learning.distances import CosineSimilarity
+from pytorch_metric_learning.utils.inference import InferenceModel, MatchFinder
+from torchsampler import ImbalancedDatasetSampler
 
 transformers_logger = logging.getLogger("transformers")
 transformers_logger.setLevel(logging.ERROR)
 
+GPU_NUM = '1'
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["CUDA_VISIBLE_DEVICES"] = GPU_NUM
 
 MODEL_TYPE = "deberta"
 PRETRAINED_PATH = 'microsoft/deberta-base'
 MAX_SEQUENCE_LENGTH = 512
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def set_seed(seed_value):
@@ -59,7 +66,7 @@ if __name__ == '__main__':
 
     # prepare to dataloader
     val_dataset = DepresionDataset(df_val, mode='test')
-    val_dataloader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=16)
+    val_dataloader = DataLoader(val_dataset, batch_size=2, shuffle=False, num_workers=16)
 
     # load pretrained model
     pretrained_model = AutoModel.from_pretrained(PRETRAINED_PATH).to(device)
@@ -79,18 +86,15 @@ if __name__ == '__main__':
     # testing
     y_pred = []
     net.eval()
-    for loader_idx, item in tqdm(enumerate(val_dataloader), total=len(val_dataloader)):
-        text, summarized_text = list(item[0]), list(item[1])
+    pbar = tqdm(enumerate(val_dataloader), total=len(val_dataloader))
+    for loader_idx, item in pbar:
+        text = list(item)
 
         # transform sentences to embeddings via DeBERTa
         input_text = tokenizer(text, truncation=True, padding=True, return_tensors="pt", max_length=MAX_SEQUENCE_LENGTH).to(device)
         output_text = pretrained_model(**input_text)
 
-        # transform sentences to embeddings via DeBERTa
-        summarized_input_text = tokenizer(summarized_text, truncation=True, padding=True, return_tensors="pt", max_length=MAX_SEQUENCE_LENGTH).to(device)
-        summarized_output_text = pretrained_model(**summarized_input_text)
-
-        predicted_output = net(output_text.last_hidden_state, summarized_output_text.last_hidden_state)
+        predicted_output, embeddings = net(output_text.last_hidden_state)
 
         # generate probabilities
         softmax = nn.Softmax(dim=1)
@@ -103,6 +107,8 @@ if __name__ == '__main__':
             y_pred = predicted_output.cpu().detach().tolist()
         else:
             y_pred += predicted_output.cpu().detach().tolist()
+
+        pbar.set_description("y_pred len: {}".format(len(y_pred)), refresh=True)
 
     answer = pd.DataFrame(y_pred, columns=category.keys())
     answer.to_csv('{}answer.csv'.format(model_path), index=False)

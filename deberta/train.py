@@ -59,7 +59,7 @@ def get_argument():
                         help="learning rate")
     opt.add_argument("--epochs",
                         type=int,
-                        default=60,
+                        default=30,
                         help="epochs")
     opt.add_argument("--hidden",
                         type=int,
@@ -167,10 +167,6 @@ if __name__ == '__main__':
             input_text = tokenizer(text, truncation=True, padding=True, return_tensors="pt", max_length=MAX_SEQUENCE_LENGTH).to(device)
             output_text = pretrained_model(**input_text)
 
-            # # transform sentences to embeddings via DeBERTa
-            # summarized_input_text = tokenizer(summarized_text, truncation=True, padding=True, return_tensors="pt", max_length=MAX_SEQUENCE_LENGTH).to(device)
-            # summarized_output_text = pretrained_model(**summarized_input_text)
-
             predicted_output, embeddings = net(output_text.last_hidden_state)
             ce_loss = criterion(predicted_output, label)
 
@@ -178,6 +174,7 @@ if __name__ == '__main__':
             scl_loss = loss_func(embeddings, label)
             loss = config['lambda'] * ce_loss + (1 - config['lambda']) * scl_loss
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
             optimizer.step()
             # scheduler.step()
 
@@ -237,7 +234,7 @@ if __name__ == '__main__':
         #         y_true += label.tolist()
 
         # original ce
-        for loader_idx, item in tqdm(enumerate(val_dataloader), total=len(val_dataloader)):
+        for loader_idx, item in enumerate(val_dataloader):
             text, label = list(item[0]), item[1].to(device)
 
             # transform sentences to embeddings via DeBERTa

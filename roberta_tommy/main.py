@@ -67,10 +67,22 @@ def set_wandb(model_type):
     # wandb.init(project="depression-challenge", entity="nycu_adsl_depression_ycw")
 
     global EPOCHS, LR, BATCH_SIZE, SEED, WARM_UP, HIDDEN, DROPOUT, LAMBDA, LAMBDA2
+    # # deberta
+    # EPOCHS = 20
+    # LR = 4e-5
+    # BATCH_SIZE = 8
+    # SEED = 17
+    # WARM_UP = 5
+    # HIDDEN = 1024
+    # DROPOUT = 0.2
+    # LAMBDA = 0.3
+    # LAMBDA2 = 0.3
+
+    # electra and roberta
     EPOCHS = 20
     LR = 4e-5
     BATCH_SIZE = 8
-    SEED = 17
+    SEED = wandb.config['seed']
     WARM_UP = 5
     HIDDEN = 512
     DROPOUT = 0.1
@@ -98,7 +110,7 @@ def set_seed():
 
 def prepare_data(train_path, dev_path):
     train_data = DepressDataset(train_path, mode='train')
-    dev_data = DepressDataset(dev_path, mode='test')
+    dev_data = DepressDataset(dev_path, mode='val')
     # train_dataloader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
     train_dataloader = DataLoader(train_data, batch_size=BATCH_SIZE, sampler=ImbalancedDatasetSampler(train_data))
     dev_dataloader = DataLoader(dev_data, batch_size=1, shuffle=False)
@@ -185,7 +197,8 @@ def train(model_type, train_path, dev_path):
 
 
 if __name__ == '__main__':
-    model_type = sys.argv[1]
+    # model_type = sys.argv[1]
+    model_type = 'electra'
     if model_type not in MODEL.keys():
         raise ValueError(f"{model_type} is not a valid model type [roberta, electra, deberta]")
     # train(model_type, train_path='../data/train.tsv', dev_path='../data/dev_with_labels.tsv')

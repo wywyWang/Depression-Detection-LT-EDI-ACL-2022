@@ -10,22 +10,28 @@ class DepressDataset(Dataset):
         self.mode = mode
         df = pd.read_csv(file_path, sep='\t')
         dic = {'not depression': 0, 'moderate': 1, 'severe': 2}
-        df['label'] = df['label'].map(dic)
-        self.labels = df['label'].tolist()
+        if mode != 'test':
+            df['label'] = df['label'].map(dic)
+            self.labels = df['label'].tolist()
         self.data = {}
         for idx, row in df.iterrows():
-            # self.data[idx] = (row['Text_data'], row['label'])
-            self.data[idx] = (row['Text_data'], row['neg'], row['neu'], row['pos'], row['compound'], row['label'])
+            if mode != 'test':
+                self.data[idx] = (row['Text_data'], row['neg'], row['neu'], row['pos'], row['compound'], row['label'])
+            else:
+                self.data[idx] = (row['Text_data'], row['neg'], row['neu'], row['pos'], row['compound'])
         
     def __len__(self):
         return len(self.data)
     
     def __getitem__(self, idx):
-        text, neg, neu, pos, compound, label = self.data[idx]
-        vad_score = [neg, neu, pos, compound]
-        return (text, torch.tensor(vad_score), torch.tensor(label, dtype=torch.long))
-        # text, label = self.data[idx]
-        # return (text, torch.tensor(label, dtype=torch.long))
+        if self.mode != 'test':
+            text, neg, neu, pos, compound, label = self.data[idx]
+            vad_score = [neg, neu, pos, compound]
+            return (text, torch.tensor(vad_score), torch.tensor(label, dtype=torch.long))
+        else:
+            text, neg, neu, pos, compound = self.data[idx]
+            vad_score = [neg, neu, pos, compound]
+            return (text, torch.tensor(vad_score))
 
     def get_labels(self):
         return self.labels
