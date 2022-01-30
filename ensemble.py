@@ -1,11 +1,15 @@
+import sys
+import numpy as np
 import pandas as pd
-from tqdm import tqdm
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, f1_score
+from sklearn.metrics import confusion_matrix, f1_score
 
 model_path = {
-    'wei': './result/dev_ensemble_wei.csv',
-    'yao': './result/dev_ensemble_0.5955_yao.csv'
-    'tommy': './result/dev_ensemble_0.5974_tommy.csv'
+    # 'wei': './result/dev_ensemble_wei.csv',
+    # 'yao': './result/dev_ensemble_0.5955_yao.csv',
+    # 'tommy': './result/dev_ensemble_0.5974_tommy.csv'
+    'wei': './result/test_ensemble_wei.csv',
+    'yao': './result/test_ensemble_0.5955_yao.csv',
+    'tommy': './result/test_ensemble_0.5974_tommy.csv'
 }
 model_count = len(model_path.keys())
 
@@ -20,11 +24,13 @@ df = {}
 for key, value in model_path.items():
     df[key] = pd.read_csv(model_path[key])
 
-# ensemble
-answer = []
-ensemble_weight = [0.5, 0.7, 0.7]
-POWER = 1/2
-for i in tqdm(range(len(df['wei']))):
+ensemble_weight = [1, 0.67, 0.69]
+POWER = 4
+max_f1 = 0
+
+answer = [] 
+
+for i in range(len(df['wei'])):
     prob = []
     if model_count == 1:
         for prob_1 in zip(df['wei'].iloc[i].values.tolist()[1:]):
@@ -42,23 +48,25 @@ for i in tqdm(range(len(df['wei']))):
             prob.append(current_prob)
 
     category = prob.index(max(prob))
-    answer.append([i+1, inverse_category[category]])
+    pid = 'test_pid_'+ str(i+1)
+    answer.append([pid, inverse_category[category]])
 
 assert len(answer) == len(df['wei'])
-answer = pd.DataFrame(answer, columns = ['Id', 'Category'])
-answer.to_csv('answer.csv', index = False)
+answer = pd.DataFrame(answer, columns = ['pid', 'class_label'])
+# answer.to_csv('answer.csv', index = False)
 
+with open('./NYCU_TWD_ensemble.tsv','w') as write_tsv:
+    write_tsv.write(answer.to_csv(sep='\t', index=False))
 
-# evaluate
-df_val = pd.read_csv('../data/val_np.tsv', sep='\t')
-df_predicted = pd.read_csv('./answer.csv')
+# # evaluate
+# df_val = pd.read_csv('../data/val_np.tsv', sep='\t')
+# df_predicted = pd.read_csv('./answer.csv')
 
-# print('gt: ', df_val['Label'])
-# print('preds: ', df_predicted['Category'])
-gt = df_val['Label']
-preds = df_predicted['Category']
+# gt = df_val['Label']
+# preds = df_predicted['class_label']
 
-labels = ['moderate', 'severe', 'not depression']
+# labels = ['moderate', 'severe', 'not depression']
 
-print(confusion_matrix(gt, preds, labels = labels))
-print('Macro F1: ', f1_score(gt, preds, average = 'macro'))
+# f1 = f1_score(gt, preds, average = 'macro')
+# print(confusion_matrix(gt, preds, labels = labels))
+# print('Macro F1: ', f1)
