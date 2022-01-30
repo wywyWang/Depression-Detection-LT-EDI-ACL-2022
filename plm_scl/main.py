@@ -24,16 +24,10 @@ MODEL = {
     "electra":{
         "pretrain": "google/electra-base-discriminator",
         "name": "google-electra-base-discriminator"
-        # "pretrain": "google/electra-large-discriminator",
-        # "name": "google-electra-large-discriminator"
     },
     "deberta":{
         "pretrain": "microsoft/deberta-base",
         "name": "deberta-base"
-    },
-    "longformer":{
-        "pretrain": "allenai/longformer-base-4096",
-        "name": "longformer-base"
     }
 }
 
@@ -111,7 +105,6 @@ def set_seed():
 def prepare_data(train_path, dev_path):
     train_data = DepressDataset(train_path, mode='train')
     dev_data = DepressDataset(dev_path, mode='val')
-    # train_dataloader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
     train_dataloader = DataLoader(train_data, batch_size=BATCH_SIZE, sampler=ImbalancedDatasetSampler(train_data))
     dev_dataloader = DataLoader(dev_data, batch_size=1, shuffle=False)
     return train_dataloader, dev_dataloader
@@ -126,8 +119,6 @@ def train(model_type, train_path, dev_path):
     train_dataloader, dev_dataloader = prepare_data(train_path, dev_path)
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
-    # model = AutoModelForSequenceClassification.from_pretrained(MODEL[model_type]["pretrain"], num_labels=3)
-    # model.to(device)
     model = Model(MODEL[model_type]["pretrain"], config).to(device)
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL[model_type]["pretrain"])
@@ -145,21 +136,16 @@ def train(model_type, train_path, dev_path):
         total_loss = 0
         for data in train_dataloader:
             optimizer.zero_grad()
-            # text, label = list(data[0]), data[1].to(device)
             text, vad_score, label = list(data[0]), data[1].to(device), data[2].to(device)
             input_text = tokenizer(text, padding=True, truncation=True, max_length=512, return_tensors="pt").to(device)
-            # logits = model(**input_text).logits
-
+            
             logits, pretrained_output, vad_embedding = model(vad_score=vad_score, **input_text)
-            # logits, pretrained_output = model(**input_text)
 
             ce_loss = criterion(logits, label)
             scl_pretrained_loss = loss_func(pretrained_output, label)
-            scl_vad_loss = loss_func(vad_embedding, label)    # not change variable before!!!
-            # loss = LAMBDA * ce_loss + (1-LAMBDA) * scl_pretrained_loss
+            scl_vad_loss = loss_func(vad_embedding, label)
             loss = LAMBDA * ce_loss + (1-LAMBDA) * scl_pretrained_loss + (LAMBDA2) * scl_vad_loss
 
-            # loss = criterion(logits, label)
             total_loss += loss.item()
             loss.backward()
             optimizer.step()
@@ -169,13 +155,9 @@ def train(model_type, train_path, dev_path):
         pred = []
         labels = []
         for data in dev_dataloader:
-            # text, label = list(data[0]), data[1].to(device)
             text, vad_score, label = list(data[0]), data[1].to(device), data[2].to(device)
             input_text = tokenizer(text, padding=True, truncation=True, max_length=512, return_tensors="pt").to(device)
             with torch.no_grad():
-                # logits = model(**input_text).logits
-
-                # logits, pretrained_output = model(**input_text)
                 logits, pretrained_output, vad_embedding = model(vad_score=vad_score, **input_text)
 
             pred.append(torch.argmax(logits, dim=-1).cpu().numpy())
@@ -197,9 +179,7 @@ def train(model_type, train_path, dev_path):
 
 
 if __name__ == '__main__':
-    # model_type = sys.argv[1]
-    model_type = 'electra'
+    model_type = sys.argv[1]
     if model_type not in MODEL.keys():
         raise ValueError(f"{model_type} is not a valid model type [roberta, electra, deberta]")
-    # train(model_type, train_path='../data/train.tsv', dev_path='../data/dev_with_labels.tsv')
     train(model_type, train_path='../data/train_np.tsv', dev_path='../data/valid_np.tsv')
