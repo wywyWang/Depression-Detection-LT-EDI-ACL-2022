@@ -49,11 +49,11 @@ def ensemble(args):
     model1.eval()
     model2.eval()
     model3.eval()
-    pred = []
+    pred, pred_dev = [], []
     pids, labels = [], []
     for data in dataloader:
         if mode == 'dev':
-            text, label = list(data[0]), data[1]
+            pid, text, label = data[0][0], list(data[1]), data[2]
         else:
             pid, text = data[0][0], list(data[1])
         input_text1 = tokenizer1(text, padding=True, truncation=True, max_length=512, return_tensors="pt").to(device)
@@ -65,8 +65,11 @@ def ensemble(args):
             outputs3 = model3(**input_text3).logits
             tmp = torch.add(torch.add(outputs1, outputs2), outputs3) / 3
         if mode == 'dev':
-            pred.append(torch.argmax(F.softmax(tmp, dim=1), dim=-1).cpu().numpy())
-            labels.append(label)
+            sf = F.softmax(tmp, dim=1)
+            pred.append(torch.argmax(sf, dim=-1).cpu().numpy())
+            pred_dev.append(sf.cpu().numpy())
+            labels.append(label.cpu().numpy())
+            pids.append(pid)
         else:
             pred.append(F.softmax(tmp, dim=1).cpu().numpy())
             pids.append(pid)
@@ -77,10 +80,12 @@ def ensemble(args):
         recall = round(recall, 4)
         f1 = round(f1, 4)
         print(f"F1 score: {f1}, Precision: {precision}, Recall: {recall}")
+        pred = np.array(pred_dev).T
     else:
         pred = np.array(pred).T
-        prob_df = pd.DataFrame({'PID': pids, 'not depression': pred[0][0], 'moderate': pred[1][0], 'severe': pred[2][0]})
-        prob_df.to_csv(f"../result/ensemble.csv", index=False)
+    
+    prob_df = pd.DataFrame({'PID': pids, 'not depression': pred[0][0], 'moderate': pred[1][0], 'severe': pred[2][0]})
+    prob_df.to_csv(f"../result/ensemble_{mode}.csv", index=False)
 
 if __name__ == '__main__':
     args = set_arg()

@@ -15,7 +15,7 @@ class DepressDataset(Dataset):
             self.labels = df['label'].tolist()
             self.data = {}
             for idx, row in df.iterrows():
-                self.data[idx] = (row['Text_data'], row['label'])
+                self.data[idx] = (row['PID'], row['Text_data'], row['label'])
         else:
             self.data = {}
             for idx, row in df.iterrows():
@@ -26,8 +26,8 @@ class DepressDataset(Dataset):
     
     def __getitem__(self, idx):
         if self.mode != 'test':
-            text, label = self.data[idx]
-            return (text, torch.tensor(label, dtype=torch.long))
+            pid, text, label = self.data[idx]
+            return (pid, text, torch.tensor(label, dtype=torch.long))
         else:
             pid, text = self.data[idx]
             return (pid, text)
