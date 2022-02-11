@@ -8,7 +8,7 @@ Given social media postings in English, the system should classify the signs of 
 ## Usage
 - Method 1: Machine Learning Models
 - Method 2: Pre-trained Language Models
-- Method 3: Pre-trained Language Models + Supervised Contrastive Learning (plm_scl/)
+- Method 3: Pre-trained Language Models + VAD Score + Supervised Contrastive Learning (plm_scl/)
   - Train model
     ```=bash
     python main.py {pre-trained name}
