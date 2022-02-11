@@ -1,4 +1,4 @@
-# Depression-Detection-LT-EDI-ACL-2022
+# NYCU-TWD in Depression-Detection-LT-EDI-ACL-2022
 
 A shared task on [Detecting Signs of Depression from Social Media Text at LT-EDI 2022, ACL 2022 Workshop](https://sites.google.com/view/lt-edi-2022/home?authuser=0). We won the **second place** and the technical report will be published in the near future.
 
