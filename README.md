@@ -7,6 +7,14 @@ Given social media postings in English, the system should classify the signs of 
 
 ## Usage
 - Method 1: Machine Learning Models
+  - Add sentiment features by VADER (preprocessing/)
+    ```=bash
+    python add_feature.py --preprocessing {boolean}
+    ```  
+  - Train model (ml/)
+    ```=bash
+    python sentiment_features_classifier.py --embedding {name} --model {name}
+    ```  
 - Method 2: Pre-trained Language Models
 - Method 3: Pre-trained Language Models + VAD Score + Supervised Contrastive Learning (plm_scl/)
   - Train model
@@ -18,6 +26,11 @@ Given social media postings in English, the system should classify the signs of 
     python evaluate.py
     ```
     You need to modify {MODEL} and {MODEL_NAME} to your pre-trained model and corresponding path in `evaluate.py`.
+    
+- Power Weighted Sum
+    ```=bash
+    python ensemble.py
+    ```
 
 ## Dataset
 The dataset comprises training, development and test set. The data files are in Tab Separated Values (tsv) format with three columns namely posting_id (pid), text data and label. 
