@@ -16,6 +16,9 @@ Given social media postings in English, the system should classify the signs of 
     python sentiment_features_classifier.py --embedding {name} --model {name}
     ```  
 - Method 2: Pre-trained Language Models
+    ```=bash
+    python3 main.py --model_type [roberta/electra/deberta]
+    ```
 - Method 3: Pre-trained Language Models + VAD Score + Supervised Contrastive Learning (plm_scl/)
   - Train model
     ```=bash
