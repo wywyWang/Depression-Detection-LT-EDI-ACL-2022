@@ -46,3 +46,4 @@ The dataset comprises training, development and test set. The data files are in 
 Performance will be measured in terms of macro averaged Precision, macro averaged Recall and macro averaged F-Score across all the classes.
 
 ## Leaderboard
+<img width="624" alt="Leaderboard" src="https://user-images.githubusercontent.com/44032506/153540392-2ff8fd40-5500-4b55-9fb8-eba898babeed.png">
