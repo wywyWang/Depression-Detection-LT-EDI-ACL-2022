@@ -1,12 +1,12 @@
 # NYCU-TWD in Depression-Detection-LT-EDI-ACL-2022
 
-A shared task on [Detecting Signs of Depression from Social Media Text at LT-EDI 2022, ACL 2022 Workshop](https://sites.google.com/view/lt-edi-2022/home?authuser=0). We won the **second place** and the technical report will be published in the near future.
+A shared task on [Detecting Signs of Depression from Social Media Text at LT-EDI 2022, ACL 2022 Workshop](https://sites.google.com/view/lt-edi-2022/home?authuser=0). We won the **second place** and the paper will be published in the near future.
 
 ## Challenge Overview
 Given social media postings in English, the system should classify the signs of depression into three labels namely “not depressed”, “moderately depressed”, and “severely depressed”.
 
 ## Usage
-- Method 1: Machine Learning Models
+- Method 1: Gradient Boosting Models
   - Add sentiment features by VADER (preprocessing/)
     ```=bash
     python add_feature.py --preprocessing {boolean}
@@ -52,6 +52,15 @@ The dataset comprises training, development and test set. The data files are in 
 
 ## Metric
 Performance will be measured in terms of macro averaged Precision, macro averaged Recall and macro averaged F-Score across all the classes.
+
+## Implementation Details
+We report the hyper-parameters of each method as follows.
+- Method 1: Gradient Boosting Models
+- Method 2: Pre-trained Language Models
+- Method 3: Pre-trained Language Models + VAD Score + Supervised Contrastive Learning
+  | Epochs | LR | Batch Size | Seed | Warmup Steps | Hidden Dimension | Dropout | Lambda_{ce} | Lambda_{scl} |
+  |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+  | 20 | 4e-5 | 8 | 17 | 5 | 512 | 0.1 | 0.7 | 0.3 |
 
 ## Leaderboard
 <img width="624" alt="Leaderboard" src="https://user-images.githubusercontent.com/44032506/153540392-2ff8fd40-5500-4b55-9fb8-eba898babeed.png">
