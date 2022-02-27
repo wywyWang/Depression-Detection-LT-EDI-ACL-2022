@@ -57,6 +57,22 @@ Performance will be measured in terms of macro averaged Precision, macro average
 We report the hyper-parameters of each method as follows.
 - Method 1: Gradient Boosting Models
 - Method 2: Pre-trained Language Models
+  - Geberal
+    | LR | Epochs |
+    |:---:|:---:|
+    | 2e-5 | 20 |
+  - RoBERTa
+    | Seed | Warm Up | Batch Size |
+    |:---:|:---:|:---:|
+    | 13 | 4 | 3 |
+  - DeBERTa
+    | Seed | Warm Up | Batch Size |
+    |:---:|:---:|:---:|
+    | 49 | 8 | 6 |
+  - ELECTRA
+    | Seed | Warm Up | Batch Size |
+    |:---:|:---:|:---:|
+    | 17 | 5 | 2 |
 - Method 3: Pre-trained Language Models + VAD Score + Supervised Contrastive Learning
   | Epochs | LR | Batch Size | Seed | Warmup Steps | Hidden Dimension | Dropout | Lambda_{ce} | Lambda_{scl} |
   |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
