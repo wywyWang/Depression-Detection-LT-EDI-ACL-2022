@@ -57,7 +57,7 @@ Performance will be measured in terms of macro averaged Precision, macro average
 We report the hyper-parameters of each method as follows.
 - Method 1: Gradient Boosting Models
 - Method 2: Pre-trained Language Models
-  - Geberal
+  - General
     | LR | Epochs |
     |:---:|:---:|
     | 2e-5 | 20 |
