@@ -1,6 +1,6 @@
 # NYCU-TWD in Depression-Detection-LT-EDI-ACL-2022
 
-A shared task on [Detecting Signs of Depression from Social Media Text at LT-EDI 2022, ACL 2022 Workshop](https://sites.google.com/view/lt-edi-2022/home?authuser=0). We won the **second place** and the paper will be published in the near future.
+A shared task on [Detecting Signs of Depression from Social Media Text at LT-EDI 2022, ACL 2022 Workshop](https://sites.google.com/view/lt-edi-2022/home?authuser=0). We won the **second place** and the paper is available at [here](https://aclanthology.org/2022.ltedi-1.15/?fbclid=IwAR2-kWbd7lsBs8W464ww39MJcxskWBMohSZzxsPafx7T2MNOaUr7dQ3JWVA).
 
 ## Challenge Overview
 Given social media postings in English, the system should classify the signs of depression into three labels namely “not depressed”, “moderately depressed”, and “severely depressed”.
