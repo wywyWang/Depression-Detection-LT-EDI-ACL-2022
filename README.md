@@ -93,3 +93,22 @@ We report the hyper-parameters of each method as follows.
 
 ## Leaderboard
 <img width="624" alt="Leaderboard" src="https://user-images.githubusercontent.com/44032506/153540392-2ff8fd40-5500-4b55-9fb8-eba898babeed.png">
+
+## Citation
+If you use our dataset or find our work is relevant to your research, please cite:
+```
+@inproceedings{wang-etal-2022-nycu,
+    title = "{NYCU}{\_}{TWD}@{LT}-{EDI}-{ACL}2022: Ensemble Models with {VADER} and Contrastive Learning for Detecting Signs of Depression from Social Media",
+    author = "Wang, Wei-Yao  and
+      Tang, Yu-Chien  and
+      Du, Wei-Wei  and
+      Peng, Wen-Chih",
+    booktitle = "Proceedings of the Second Workshop on Language Technology for Equality, Diversity and Inclusion",
+    month = may,
+    year = "2022",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2022.ltedi-1.15",
+    doi = "10.18653/v1/2022.ltedi-1.15",
+    pages = "136--139",
+}
+```
